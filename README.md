@@ -14,9 +14,12 @@ Phone-first food diary (MyFitnessPal-style): meals, macros, barcode scan, analyt
 
 ## Quick start
 
-1. Configure Supabase (migrations + keys) — [SUPABASE.md](SUPABASE.md)  
-2. `npm install && npm start`  
-3. Open http://localhost:4200 and create an account  
+1. Create Supabase project + run migrations — [SUPABASE.md](SUPABASE.md)  
+2. `cp .env.example .env` and paste your Project URL + anon key  
+3. `npm install && npm start`  
+4. Open http://localhost:4200 and create an account  
+
+Production: set the same keys as Vercel env vars (not in git) — [DEPLOY.md](DEPLOY.md)
 
 ## Features
 

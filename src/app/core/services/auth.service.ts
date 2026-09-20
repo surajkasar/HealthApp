@@ -5,7 +5,7 @@ import { DEFAULT_TARGETS, Profile } from '../models/food.models';
 import { SupabaseService } from './supabase.service';
 
 const CONFIG_ERROR =
-  'Supabase is not configured. Add supabaseUrl and supabaseAnonKey in src/environments/environment.development.ts (see SUPABASE.md).';
+  'Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env (local) or Vercel env vars (see SUPABASE.md).';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
