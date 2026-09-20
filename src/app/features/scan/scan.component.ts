@@ -1,13 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import {
-  AfterViewInit,
-  Component,
-  ElementRef,
-  OnDestroy,
-  ViewChild,
-  inject,
-  signal,
-} from '@angular/core';
+import { AfterViewInit, Component, OnDestroy, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
@@ -57,8 +49,6 @@ const FORMATS = {
   templateUrl: './scan.component.html',
 })
 export class ScanComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('reader', { static: true }) readerRef!: ElementRef<HTMLDivElement>;
-
   private readonly off = inject(OpenFoodFactsService);
   private readonly food = inject(FoodService);
   private readonly router = inject(Router);
@@ -90,7 +80,6 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // Do NOT call getUserMedia here — browsers suppress the permission prompt
     // unless it runs in a user gesture (tap). Show tap-to-start instead.
-    this.ensureReaderElement();
     if (this.insecureContext()) {
       this.cameraError.set(this.cameraUnavailableMessage());
       this.needsTap.set(false);
@@ -351,10 +340,18 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private ensureReaderElement(): void {
-    const el = this.readerRef.nativeElement;
-    el.id = this.readerId;
+  /**
+   * Resolve the scanner host by id — do not use static ViewChild.
+   * `#reader` lives inside `@if (!product())`, so `@ViewChild(..., { static: true })`
+   * is undefined on Safari/iOS and crashes after permission is granted.
+   */
+  private ensureReaderElement(): HTMLElement {
+    const el = document.getElementById(this.readerId);
+    if (!el) {
+      throw new Error('Scanner area not ready. Tap Start camera again.');
+    }
     el.innerHTML = '';
+    return el;
   }
 
   private permissionDeniedMessage(err: unknown): string {
