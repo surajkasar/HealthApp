@@ -1,0 +1,91 @@
+<div class="min-h-dvh bg-app px-4 py-10">
+  <div class="mx-auto flex max-w-md flex-col gap-8">
+    <div class="text-center">
+      <p class="font-display text-4xl text-ink-900">FuelLog</p>
+      <p class="mt-2 text-sm text-ink-500">
+        Diet tracking for your phone — log meals, hit macros, scan barcodes.
+      </p>
+    </div>
+
+    <div class="rounded-3xl border border-ink-200 bg-white/90 p-6 shadow-soft">
+      @if (!configured) {
+        <p class="mb-4 rounded-2xl bg-coral-500/10 px-3 py-2 text-xs text-ink-800">
+          Supabase is required. Create a project, run the SQL migrations, then set
+          <code>supabaseUrl</code> and <code>supabaseAnonKey</code> in
+          <code>src/environments/environment.development.ts</code>. See
+          <strong>SUPABASE.md</strong>.
+        </p>
+      }
+
+      <div class="mb-5 flex rounded-full bg-ink-100 p-1 text-sm font-medium">
+        <button
+          type="button"
+          class="flex-1 rounded-full py-2 transition"
+          [class.bg-white]="mode() === 'signin'"
+          [class.shadow-sm]="mode() === 'signin'"
+          (click)="mode.set('signin')"
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-full py-2 transition"
+          [class.bg-white]="mode() === 'signup'"
+          [class.shadow-sm]="mode() === 'signup'"
+          (click)="mode.set('signup')"
+        >
+          Create account
+        </button>
+      </div>
+
+      <form class="space-y-3" (ngSubmit)="submit()">
+        @if (mode() === 'signup') {
+          <label class="block text-sm">
+            <span class="mb-1 block text-ink-600">Display name</span>
+            <input
+              class="field"
+              name="displayName"
+              [(ngModel)]="displayName"
+              placeholder="Suraj"
+              autocomplete="nickname"
+            />
+          </label>
+        }
+
+        <label class="block text-sm">
+          <span class="mb-1 block text-ink-600">Email</span>
+          <input
+            class="field"
+            type="email"
+            name="email"
+            [(ngModel)]="email"
+            placeholder="you@email.com"
+            autocomplete="email"
+            required
+          />
+        </label>
+
+        <label class="block text-sm">
+          <span class="mb-1 block text-ink-600">Password</span>
+          <input
+            class="field"
+            type="password"
+            name="password"
+            [(ngModel)]="password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+
+        @if (error()) {
+          <p class="text-sm text-coral-600">{{ error() }}</p>
+        }
+
+        <button type="submit" class="btn-primary w-full" [disabled]="loading() || !configured">
+          {{ loading() ? 'Please wait…' : mode() === 'signin' ? 'Sign in' : 'Create account' }}
+        </button>
+      </form>
+    </div>
+  </div>
+</div>

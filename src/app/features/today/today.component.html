@@ -1,0 +1,200 @@
+<div class="space-y-5">
+  <section class="flex items-center justify-between gap-2">
+    <button type="button" class="icon-btn" (click)="prevDay()" aria-label="Previous day">‹</button>
+    <div class="text-center">
+      <p class="font-display text-lg">{{ isTodayDate() ? 'Today' : displayDate() }}</p>
+      @if (!isTodayDate()) {
+        <button type="button" class="text-xs text-leaf-700 underline" (click)="goToday()">
+          Jump to today
+        </button>
+      } @else {
+        <p class="text-xs text-ink-500">{{ displayDate() }} · Asia/Kolkata</p>
+      }
+    </div>
+    <button
+      type="button"
+      class="icon-btn"
+      (click)="nextDay()"
+      [disabled]="isTodayDate()"
+      aria-label="Next day"
+    >
+      ›
+    </button>
+  </section>
+
+  @if (streaks(); as s) {
+    <div class="grid grid-cols-2 gap-2">
+      <div class="rounded-2xl border border-ink-200 bg-white px-3 py-2">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">Streak</p>
+        <p class="font-display text-xl">{{ s.currentStreak }}d</p>
+      </div>
+      <div class="rounded-2xl border border-ink-200 bg-white px-3 py-2">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">This week</p>
+        <p class="font-display text-xl">{{ s.scoreLabel }}</p>
+      </div>
+    </div>
+  }
+
+  @if (profile(); as p) {
+    <section class="rounded-3xl bg-ink-950 text-ink-50 p-5 shadow-soft">
+      <div class="flex items-end justify-between gap-3">
+        <div>
+          <p class="text-xs uppercase tracking-wider text-ink-300">Calories</p>
+          <p class="font-display text-4xl leading-none mt-1">
+            {{ totals().calories | number: '1.0-0' }}
+            <span class="text-base text-ink-400">/ {{ p.calorieTarget }}</span>
+          </p>
+          <p class="mt-2 text-sm" [ngClass]="remaining().calories >= 0 ? 'text-leaf-400' : 'text-coral-400'">
+            @if (remaining().calories >= 0) {
+              {{ remaining().calories }} left
+            } @else {
+              {{ -remaining().calories }} over
+            }
+          </p>
+        </div>
+        <div class="relative h-20 w-20">
+          <svg viewBox="0 0 36 36" class="h-20 w-20 -rotate-90">
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#2b3d34" stroke-width="3" />
+            <circle
+              cx="18"
+              cy="18"
+              r="15.5"
+              fill="none"
+              stroke="#4ade80"
+              stroke-width="3"
+              stroke-linecap="round"
+              [attr.stroke-dasharray]="caloriePct() + ', 100'"
+            />
+          </svg>
+          <span class="absolute inset-0 grid place-items-center text-sm font-semibold">
+            {{ caloriePct() }}%
+          </span>
+        </div>
+      </div>
+
+      <div class="mt-5 grid grid-cols-3 gap-2">
+        <div class="macro-chip">
+          <p class="label">Protein</p>
+          <p class="value">{{ totals().protein | number: '1.0-0' }}g</p>
+          <div class="bar"><span [style.width.%]="pct(totals().protein, p.proteinTarget)"></span></div>
+        </div>
+        <div class="macro-chip">
+          <p class="label">Carbs</p>
+          <p class="value">{{ totals().carbs | number: '1.0-0' }}g</p>
+          <div class="bar"><span [style.width.%]="pct(totals().carbs, p.carbsTarget)"></span></div>
+        </div>
+        <div class="macro-chip">
+          <p class="label">Fat</p>
+          <p class="value">{{ totals().fat | number: '1.0-0' }}g</p>
+          <div class="bar"><span [style.width.%]="pct(totals().fat, p.fatTarget)"></span></div>
+        </div>
+      </div>
+
+      <p class="mt-3 text-xs text-ink-300">
+        Fiber {{ totals().fiber | number: '1.0-0' }}g ·
+        Sugar {{ totals().sugar | number: '1.0-0' }}g ·
+        Sodium {{ totals().sodium | number: '1.0-0' }}mg
+      </p>
+
+      @if (macroDonut(); as cfg) {
+        <div class="mt-4 rounded-2xl bg-white/5 p-3">
+          <p class="mb-1 text-[10px] uppercase tracking-wide text-ink-300">Macro calories</p>
+          <app-mini-chart [config]="cfg" [height]="180" />
+        </div>
+      }
+    </section>
+  }
+
+  <div class="flex flex-wrap gap-2">
+    <a routerLink="/add" class="btn-primary flex-1 text-center min-w-[40%]">Log food</a>
+    <a routerLink="/scan" class="btn-secondary flex-1 text-center min-w-[40%]">Scan</a>
+    <button type="button" class="btn-secondary w-full" [disabled]="busy()" (click)="copyYesterday()">
+      {{ busy() ? 'Working…' : 'Copy yesterday’s meals' }}
+    </button>
+  </div>
+
+  @if (message()) {
+    <p class="text-sm text-ink-600">{{ message() }}</p>
+  }
+
+  <div class="rounded-2xl border border-ink-200 bg-white p-3 space-y-2">
+    <p class="text-xs font-medium text-ink-600">Save meal as template</p>
+    <input
+      class="field"
+      placeholder="e.g. Usual breakfast"
+      [ngModel]="templateName()"
+      (ngModelChange)="templateName.set($event)"
+    />
+    <div class="flex flex-wrap gap-2">
+      @for (m of meals(); track m.meal) {
+        <button
+          type="button"
+          class="rounded-full border border-ink-200 px-3 py-1 text-xs"
+          [disabled]="busy() || m.items.length === 0"
+          (click)="saveMealTemplate(m.meal)"
+        >
+          Save {{ m.label }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p class="text-sm text-ink-500">Loading diary…</p>
+  } @else {
+    @for (group of meals(); track group.meal) {
+      <section class="rounded-2xl border border-ink-200 bg-white/80 overflow-hidden">
+        <div class="flex items-center justify-between gap-2 bg-ink-50 px-4 py-3">
+          <h2 class="font-semibold text-ink-800">{{ group.label }}</h2>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="text-[10px] text-leaf-700 underline"
+              [disabled]="busy()"
+              (click)="copyMealFromYesterday(group.meal)"
+            >
+              Copy yday
+            </button>
+            <p class="text-xs text-ink-500">{{ group.subtotal.calories | number: '1.0-0' }} kcal</p>
+          </div>
+        </div>
+        @if (group.items.length === 0) {
+          <p class="px-4 py-4 text-sm text-ink-400">Nothing logged yet</p>
+        } @else {
+          <ul class="divide-y divide-ink-100">
+            @for (item of group.items; track item.id) {
+              <li class="flex items-start gap-3 px-4 py-3">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate font-medium text-ink-900">{{ item.name }}</p>
+                  @if (item.brand) {
+                    <p class="truncate text-xs text-ink-500">{{ item.brand }}</p>
+                  }
+                  <p class="mt-1 text-xs text-ink-500">
+                    {{ item.servingQty }} {{ item.servingUnit }} ·
+                    P {{ item.protein | number: '1.0-0' }} ·
+                    C {{ item.carbs | number: '1.0-0' }} ·
+                    F {{ item.fat | number: '1.0-0' }}
+                    @if (item.fiber || item.sugar || item.sodium) {
+                      · Fi {{ item.fiber | number: '1.0-0' }} ·
+                      Su {{ item.sugar | number: '1.0-0' }} ·
+                      Na {{ item.sodium | number: '1.0-0' }}
+                    }
+                  </p>
+                </div>
+                <div class="text-right">
+                  <p class="text-sm font-semibold">{{ item.calories | number: '1.0-0' }}</p>
+                  <button type="button" class="mt-1 text-xs text-coral-600" (click)="remove(item.id)">
+                    Remove
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    <a routerLink="/history" class="block text-center text-sm text-ink-500 underline">View history</a>
+    <a routerLink="/analytics" class="block text-center text-sm text-leaf-700 underline">Open analytics</a>
+  }
+</div>

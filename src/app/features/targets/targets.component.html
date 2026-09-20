@@ -1,0 +1,47 @@
+<div class="space-y-4">
+  <div>
+    <h1 class="font-display text-2xl">Daily goals</h1>
+    <p class="text-sm text-ink-500">
+      Set calorie and macro targets. Your Today screen tracks progress against these.
+    </p>
+  </div>
+
+  <form class="space-y-3 rounded-2xl border border-ink-200 bg-white p-4" (ngSubmit)="save()">
+    <label class="block text-sm">
+      <span class="mb-1 block text-ink-600">Calories (kcal)</span>
+      <input class="field" type="number" min="0" [(ngModel)]="calorieTarget" name="calorieTarget" />
+    </label>
+    <label class="block text-sm">
+      <span class="mb-1 block text-ink-600">Protein (g)</span>
+      <input class="field" type="number" min="0" [(ngModel)]="proteinTarget" name="proteinTarget" />
+    </label>
+    <label class="block text-sm">
+      <span class="mb-1 block text-ink-600">Carbs (g)</span>
+      <input class="field" type="number" min="0" [(ngModel)]="carbsTarget" name="carbsTarget" />
+    </label>
+    <label class="block text-sm">
+      <span class="mb-1 block text-ink-600">Fat (g)</span>
+      <input class="field" type="number" min="0" [(ngModel)]="fatTarget" name="fatTarget" />
+    </label>
+
+    @if (message()) {
+      <p class="text-sm text-leaf-700">{{ message() }}</p>
+    }
+    @if (error()) {
+      <p class="text-sm text-coral-600">{{ error() }}</p>
+    }
+
+    <button type="submit" class="btn-primary w-full" [disabled]="saving()">
+      {{ saving() ? 'Saving…' : 'Save goals' }}
+    </button>
+  </form>
+
+  <div class="rounded-2xl bg-ink-50 p-4 text-sm text-ink-600 space-y-2">
+    <p class="font-medium text-ink-800">Quick tips</p>
+    <ul class="list-disc pl-5 space-y-1">
+      <li>Many people start near bodyweight(kg) × 1.6–2.2g protein.</li>
+      <li>Adjust calories weekly based on weight trend, not daily scale noise.</li>
+      <li>You can change goals anytime — they apply immediately to Today.</li>
+    </ul>
+  </div>
+</div>

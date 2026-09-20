@@ -1,0 +1,34 @@
+<div class="space-y-4">
+  <div>
+    <h1 class="font-display text-2xl">History</h1>
+    <p class="text-sm text-ink-500">Recent days in your food diary.</p>
+  </div>
+
+  @if (loading()) {
+    <p class="text-sm text-ink-500">Loading…</p>
+  } @else {
+    <ul class="overflow-hidden rounded-2xl border border-ink-200 bg-white divide-y divide-ink-100">
+      @for (row of rows(); track row.date) {
+        <li>
+          <a
+            routerLink="/"
+            [queryParams]="{ date: row.date }"
+            class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-ink-50"
+          >
+            <div>
+              <p class="font-medium text-ink-900">{{ row.label }}</p>
+              <p class="text-xs text-ink-500">
+                P {{ row.protein }} · C {{ row.carbs }} · F {{ row.fat }}
+              </p>
+            </div>
+            <p class="text-sm font-semibold">{{ row.calories }} kcal</p>
+          </a>
+        </li>
+      } @empty {
+        <li class="px-4 py-8 text-center text-sm text-ink-400">No history yet. Log your first meal.</li>
+      }
+    </ul>
+  }
+
+  <a routerLink="/" class="block text-center text-sm text-ink-500 underline">Back to today</a>
+</div>

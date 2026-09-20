@@ -1,0 +1,53 @@
+<div class="min-h-dvh bg-app text-ink-900 flex flex-col">
+  <header class="sticky top-0 z-20 border-b border-ink-200/70 bg-[#f3f7f4]/90 backdrop-blur-md">
+    <div class="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
+      <div>
+        <p class="font-display text-xl tracking-tight text-ink-900">FuelLog</p>
+        <p class="text-xs text-ink-500">Synced with Supabase</p>
+      </div>
+      <button
+        type="button"
+        class="rounded-full border border-ink-200 bg-white px-3 py-1.5 text-xs font-medium text-ink-600"
+        (click)="auth.signOut()"
+      >
+        Sign out
+      </button>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-lg flex-1 px-4 pb-28 pt-4">
+    <router-outlet />
+  </main>
+
+  <nav
+    class="fixed bottom-0 left-0 right-0 z-20 border-t border-ink-200/80 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
+  >
+    <div class="mx-auto grid max-w-lg grid-cols-5 gap-0.5 px-1 py-2 text-center text-[10px] font-medium sm:text-[11px]">
+      <a
+        routerLink="/"
+        routerLinkActive="nav-active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="nav-item"
+      >
+        <span class="nav-icon">◉</span>
+        Today
+      </a>
+      <a routerLink="/add" routerLinkActive="nav-active" class="nav-item">
+        <span class="nav-icon">＋</span>
+        Add
+      </a>
+      <a routerLink="/scan" routerLinkActive="nav-active" class="nav-item">
+        <span class="nav-icon">▣</span>
+        Scan
+      </a>
+      <a routerLink="/analytics" routerLinkActive="nav-active" class="nav-item">
+        <span class="nav-icon">▤</span>
+        Stats
+      </a>
+      <a routerLink="/targets" routerLinkActive="nav-active" class="nav-item">
+        <span class="nav-icon">◎</span>
+        Goals
+      </a>
+    </div>
+  </nav>
+</div>

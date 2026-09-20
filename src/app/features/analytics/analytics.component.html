@@ -1,0 +1,171 @@
+<div class="space-y-4">
+  <div>
+    <h1 class="font-display text-2xl">Analytics</h1>
+    <p class="text-sm text-ink-500">Nutrition trends and weight history.</p>
+  </div>
+
+  <div class="flex rounded-full bg-ink-100 p-1 text-sm font-medium">
+    <button
+      type="button"
+      class="flex-1 rounded-full py-2"
+      [class.bg-white]="tab() === 'nutrition'"
+      [class.shadow-sm]="tab() === 'nutrition'"
+      (click)="setTab('nutrition')"
+    >
+      Nutrition
+    </button>
+    <button
+      type="button"
+      class="flex-1 rounded-full py-2"
+      [class.bg-white]="tab() === 'weight'"
+      [class.shadow-sm]="tab() === 'weight'"
+      (click)="setTab('weight')"
+    >
+      Weight
+    </button>
+  </div>
+
+  @if (loading()) {
+    <p class="text-sm text-ink-500">Loading analytics…</p>
+  } @else if (tab() === 'nutrition') {
+    <div class="flex gap-2">
+      @for (d of rangeOptions; track d) {
+        <button
+          type="button"
+          class="rounded-full border px-3 py-1.5 text-xs font-medium"
+          [class.bg-ink-950]="rangeDays() === d"
+          [class.text-white]="rangeDays() === d"
+          [class.border-ink-950]="rangeDays() === d"
+          [class.border-ink-200]="rangeDays() !== d"
+          (click)="setRange(d)"
+        >
+          {{ d }}d
+        </button>
+      }
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-2xl border border-ink-200 bg-white p-3">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">Avg calories</p>
+        <p class="font-display text-2xl">{{ avgCalories() }}</p>
+      </div>
+      <div class="rounded-2xl border border-ink-200 bg-white p-3">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">Days on target</p>
+        <p class="font-display text-2xl">{{ daysOnTarget() }}/{{ rangeDays() }}</p>
+      </div>
+    </div>
+
+    <section class="rounded-2xl border border-ink-200 bg-white p-4 space-y-2">
+      <h2 class="font-semibold text-ink-800">Calories vs target</h2>
+      @if (calorieChart(); as cfg) {
+        <app-mini-chart [config]="cfg" [height]="220" />
+      }
+    </section>
+
+    <section class="rounded-2xl border border-ink-200 bg-white p-4 space-y-2">
+      <h2 class="font-semibold text-ink-800">Macro calories (period)</h2>
+      <p class="text-xs text-ink-500">Split by protein / carbs / fat energy (4/4/9).</p>
+      @if (macroChart(); as cfg) {
+        <app-mini-chart [config]="cfg" [height]="220" />
+      }
+    </section>
+
+    <section class="rounded-2xl border border-ink-200 bg-white p-4 space-y-2">
+      <h2 class="font-semibold text-ink-800">Calories by meal</h2>
+      @if (mealChart(); as cfg) {
+        <app-mini-chart [config]="cfg" [height]="220" />
+      }
+    </section>
+  } @else {
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-2xl border border-ink-200 bg-white p-3">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">Latest</p>
+        <p class="font-display text-2xl">
+          @if (latestWeight(); as w) {
+            {{ w.weightKg | number: '1.0-1' }}
+            <span class="text-sm text-ink-400">kg</span>
+          } @else {
+            —
+          }
+        </p>
+      </div>
+      <div class="rounded-2xl border border-ink-200 bg-white p-3">
+        <p class="text-[10px] uppercase tracking-wide text-ink-400">Change</p>
+        <p class="font-display text-2xl">
+          @if (weightDelta() !== null) {
+            {{ weightDelta()! > 0 ? '+' : '' }}{{ weightDelta() | number: '1.0-1' }}
+            <span class="text-sm text-ink-400">kg</span>
+          } @else {
+            —
+          }
+        </p>
+      </div>
+    </div>
+
+    <form class="rounded-2xl border border-ink-200 bg-white p-4 space-y-3" (ngSubmit)="saveWeight()">
+      <h2 class="font-semibold text-ink-800">Log weight</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block text-sm">
+          <span class="mb-1 block text-ink-600">Weight (kg)</span>
+          <input
+            class="field"
+            type="number"
+            step="0.1"
+            min="1"
+            max="500"
+            name="weightKg"
+            [(ngModel)]="weightKg"
+            required
+          />
+        </label>
+        <label class="block text-sm">
+          <span class="mb-1 block text-ink-600">Date</span>
+          <input class="field" type="date" name="weightDate" [(ngModel)]="weightDate" />
+        </label>
+      </div>
+      <label class="block text-sm">
+        <span class="mb-1 block text-ink-600">Note (optional)</span>
+        <input class="field" name="weightNote" [(ngModel)]="weightNote" placeholder="Morning, fasted…" />
+      </label>
+      @if (weightError()) {
+        <p class="text-sm text-coral-600">{{ weightError() }}</p>
+      }
+      @if (weightMessage()) {
+        <p class="text-sm text-leaf-700">{{ weightMessage() }}</p>
+      }
+      <button type="submit" class="btn-primary w-full" [disabled]="savingWeight()">
+        {{ savingWeight() ? 'Saving…' : 'Save weight' }}
+      </button>
+    </form>
+
+    <section class="rounded-2xl border border-ink-200 bg-white p-4 space-y-2">
+      <h2 class="font-semibold text-ink-800">Weight trend</h2>
+      @if (weightEntries().length === 0) {
+        <p class="text-sm text-ink-400 py-6 text-center">No weight logs yet.</p>
+      } @else {
+        @if (weightChart(); as cfg) {
+          <app-mini-chart [config]="cfg" [height]="220" />
+        }
+      }
+    </section>
+
+    <ul class="overflow-hidden rounded-2xl border border-ink-200 bg-white divide-y divide-ink-100">
+      @for (w of weightEntries(); track w.id) {
+        <li class="flex items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p class="font-medium">{{ w.weightKg | number: '1.0-1' }} kg</p>
+            <p class="text-xs text-ink-500">
+              {{ formatDay(w.loggedDate) }}
+              @if (w.note) {
+                · {{ w.note }}
+              }
+            </p>
+          </div>
+          <button type="button" class="text-xs text-coral-600" (click)="removeWeight(w.id)">
+            Remove
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</div>
