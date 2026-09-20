@@ -27,7 +27,6 @@ import { todayInAppTz } from '../../core/utils/date.util';
 
 const DRINK_QUICK_ML = [200, 250, 330, 500];
 
-/** Adaptive scan box — fixed 280×180 overflows many phone viewfinders and breaks start(). */
 const SCAN_CONFIG = {
   fps: 10,
   qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
@@ -70,7 +69,8 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
 
   readonly scanning = signal(false);
   readonly starting = signal(false);
-  readonly needsTap = signal(false);
+  /** Always show tap-to-start until camera is live (mobile needs a real gesture). */
+  readonly needsTap = signal(true);
   readonly cameraError = signal<string | null>(null);
   readonly lookupError = signal<string | null>(null);
   readonly product = signal<FoodSearchResult | null>(null);
@@ -79,7 +79,6 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
   readonly saving = signal(false);
   readonly fileScanning = signal(false);
 
-  /** True on http://LAN — live camera often blocked; photo/manual still work. */
   readonly insecureContext = signal(!globalThis.isSecureContext);
 
   codeInput = '';
@@ -88,69 +87,82 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
   readonly drinkQuickMl = DRINK_QUICK_ML;
   readonly readerId = 'qr-reader';
 
-  async ngAfterViewInit(): Promise<void> {
-    // Try auto-start (works on many desktops). Mobile often needs a tap — see needsTap.
-    await this.startScanner({ fromUserGesture: false });
+  ngAfterViewInit(): void {
+    // Do NOT call getUserMedia here — browsers suppress the permission prompt
+    // unless it runs in a user gesture (tap). Show tap-to-start instead.
+    this.ensureReaderElement();
+    if (this.insecureContext()) {
+      this.cameraError.set(this.cameraUnavailableMessage());
+      this.needsTap.set(false);
+    }
   }
 
   async ngOnDestroy(): Promise<void> {
     await this.stopScanner();
   }
 
-  /** Black-box / Retry — always a user gesture so getUserMedia is allowed. */
+  /**
+   * Must call getUserMedia as the first await in this click handler.
+   * Any prior await (stopScanner, etc.) breaks the gesture on iOS/Android Chrome
+   * and the permission dialog never appears.
+   */
   async onEnableCamera(): Promise<void> {
-    await this.startScanner({ fromUserGesture: true });
-  }
-
-  async startScanner(opts: { fromUserGesture: boolean } = { fromUserGesture: true }): Promise<void> {
     this.cameraError.set(null);
     this.lastCameraError = '';
     this.starting.set(true);
     this.needsTap.set(false);
     this.handling = false;
 
+    if (this.insecureContext()) {
+      this.starting.set(false);
+      this.cameraError.set(this.cameraUnavailableMessage());
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.starting.set(false);
+      this.cameraError.set(
+        'This browser does not support camera access. Use photo upload or type the code.'
+      );
+      this.needsTap.set(true);
+      return;
+    }
+
+    // --- FIRST await: permission prompt (keep gesture alive) ---
+    let warmup: MediaStream | null = null;
     try {
-      if (this.insecureContext()) {
-        this.cameraError.set(this.cameraUnavailableMessage());
-        this.scanning.set(false);
-        this.needsTap.set(false);
+      warmup = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' } },
+      });
+    } catch (err1) {
+      this.lastCameraError = err1 instanceof Error ? err1.message : String(err1);
+      try {
+        warmup = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        });
+      } catch (err2) {
+        this.lastCameraError = err2 instanceof Error ? err2.message : String(err2);
+        this.starting.set(false);
+        this.needsTap.set(true);
+        this.cameraError.set(this.permissionDeniedMessage(err2));
         return;
       }
+    }
 
-      if (!navigator.mediaDevices?.getUserMedia) {
-        this.cameraError.set(
-          'This browser does not support camera access. Use photo upload or type the code.'
-        );
-        return;
-      }
+    // Release warmup tracks so html5-qrcode can open the camera.
+    warmup.getTracks().forEach((t) => t.stop());
+    warmup = null;
 
+    try {
       await this.stopScanner();
       this.ensureReaderElement();
-
-      // Explicit permission first — more reliable than html5-qrcode alone on iOS/Chrome.
-      const permitted = await this.requestCameraPermission();
-      if (!permitted) {
-        if (!opts.fromUserGesture) {
-          // Auto-start blocked until user taps the preview.
-          this.needsTap.set(true);
-          this.scanning.set(false);
-          return;
-        }
-        this.cameraError.set(this.cameraUnavailableMessage());
-        this.needsTap.set(true);
-        this.scanning.set(false);
-        return;
-      }
-
       this.scanner = new Html5Qrcode(this.readerId, FORMATS);
       const started = await this.tryStartCamera(this.scanner);
       if (!started) {
-        if (!opts.fromUserGesture) {
-          this.needsTap.set(true);
-        } else {
-          this.cameraError.set(this.cameraUnavailableMessage());
-          this.needsTap.set(true);
-        }
+        this.cameraError.set(this.cameraUnavailableMessage());
+        this.needsTap.set(true);
         this.scanning.set(false);
         return;
       }
@@ -159,12 +171,8 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
     } catch (err) {
       console.error(err);
       this.lastCameraError = err instanceof Error ? err.message : String(err);
-      if (!opts.fromUserGesture) {
-        this.needsTap.set(true);
-      } else {
-        this.cameraError.set(this.cameraUnavailableMessage());
-        this.needsTap.set(true);
-      }
+      this.cameraError.set(this.cameraUnavailableMessage());
+      this.needsTap.set(true);
       this.scanning.set(false);
     } finally {
       this.starting.set(false);
@@ -210,7 +218,7 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
       this.lookupError.set(
         'Could not read a barcode from that image. Try a clearer photo or enter the code manually.'
       );
-      void this.startScanner({ fromUserGesture: false });
+      this.needsTap.set(true);
     } finally {
       this.fileScanning.set(false);
     }
@@ -278,34 +286,9 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
 
   async scanAgain(): Promise<void> {
     this.clearProduct();
-    await this.startScanner({ fromUserGesture: true });
-  }
-
-  /** Unlock permission with a real getUserMedia call, then release tracks. */
-  private async requestCameraPermission(): Promise<boolean> {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: 'environment' } },
-      });
-      stream.getTracks().forEach((t) => t.stop());
-      return true;
-    } catch (err) {
-      console.warn('getUserMedia environment failed', err);
-      this.lastCameraError = err instanceof Error ? err.message : String(err);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: true,
-        });
-        stream.getTracks().forEach((t) => t.stop());
-        return true;
-      } catch (err2) {
-        console.warn('getUserMedia any video failed', err2);
-        this.lastCameraError = err2 instanceof Error ? err2.message : String(err2);
-        return false;
-      }
-    }
+    this.needsTap.set(true);
+    // User already tapped "Scan again" — start immediately under that gesture.
+    await this.onEnableCamera();
   }
 
   private async tryStartCamera(scanner: Html5Qrcode): Promise<boolean> {
@@ -320,8 +303,7 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
       this.lastCameraError = err instanceof Error ? err.message : String(err);
     }
 
-    const ordered = this.preferRearCameras(cameras);
-    for (const cam of ordered) {
+    for (const cam of this.preferRearCameras(cameras)) {
       if (await this.tryStart(scanner, cam.id, onSuccess, onError)) {
         return true;
       }
@@ -339,12 +321,9 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
 
   private preferRearCameras(cameras: CameraDevice[]): CameraDevice[] {
     if (!cameras.length) return [];
-    const rear = cameras.filter((c) =>
-      /back|rear|environment|world/i.test(c.label)
-    );
+    const rear = cameras.filter((c) => /back|rear|environment|world/i.test(c.label));
     const front = cameras.filter((c) => /front|user|face/i.test(c.label));
     const rest = cameras.filter((c) => !rear.includes(c) && !front.includes(c));
-    // Phones: rear first. Laptops often only have "front"/ unlabeled — use all.
     return [...rear, ...rest, ...front];
   }
 
@@ -378,6 +357,22 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
     el.innerHTML = '';
   }
 
+  private permissionDeniedMessage(err: unknown): string {
+    const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : '';
+    const msg = err instanceof Error ? err.message : String(err);
+    if (name === 'NotAllowedError' || /denied|permission/i.test(msg)) {
+      return (
+        'Camera permission is blocked for this site. On iPhone: Settings → Safari → Camera ' +
+        '(or the aA menu → Website Settings). On Android Chrome: lock icon → Permissions → Camera → Allow. ' +
+        'Then tap Start camera again.'
+      );
+    }
+    if (name === 'NotFoundError') {
+      return 'No camera found on this device. Use photo upload or type the code.';
+    }
+    return this.cameraUnavailableMessage();
+  }
+
   private cameraUnavailableMessage(): string {
     if (this.insecureContext()) {
       return (
@@ -386,8 +381,8 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
     }
     const detail = this.lastCameraError ? ` (${this.lastCameraError})` : '';
     return (
-      `Camera unavailable${detail}. Allow camera for this site in browser/system settings, ` +
-      'close other apps using the camera, then tap the preview — or upload a photo / type the code.'
+      `Camera unavailable${detail}. Tap “Start camera”, allow access when asked, ` +
+      'or use photo upload / type the code.'
     );
   }
 

@@ -29,7 +29,7 @@
         >
           <span class="text-base font-semibold">Tap to start camera</span>
           <span class="text-xs text-white/70">
-            Allow camera access when the browser asks
+            Your phone will ask for camera permission — choose Allow
           </span>
         </button>
       }
@@ -40,8 +40,8 @@
     }
 
     @if (!scanning() && !starting()) {
-      <button type="button" class="btn-secondary w-full" (click)="onEnableCamera()">
-        {{ cameraError() || needsTap() ? 'Retry camera' : 'Start camera' }}
+      <button type="button" class="btn-primary w-full" (click)="onEnableCamera()">
+        Start camera
       </button>
     }
 
