@@ -27,10 +27,15 @@ import { todayInAppTz } from '../../core/utils/date.util';
 
 const DRINK_QUICK_ML = [200, 250, 330, 500];
 
+/** Adaptive scan box — fixed 280×180 overflows many phone viewfinders and breaks start(). */
 const SCAN_CONFIG = {
   fps: 10,
-  qrbox: { width: 280, height: 180 },
-  aspectRatio: 1.777,
+  qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+    const width = Math.max(160, Math.min(280, Math.floor(viewfinderWidth * 0.85)));
+    const height = Math.max(100, Math.min(180, Math.floor(viewfinderHeight * 0.45)));
+    return { width, height };
+  },
+  aspectRatio: 1.333,
 };
 
 const FORMATS = {
@@ -61,9 +66,11 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
 
   private scanner: Html5Qrcode | null = null;
   private handling = false;
+  private lastCameraError = '';
 
   readonly scanning = signal(false);
   readonly starting = signal(false);
+  readonly needsTap = signal(false);
   readonly cameraError = signal<string | null>(null);
   readonly lookupError = signal<string | null>(null);
   readonly product = signal<FoodSearchResult | null>(null);
@@ -82,33 +89,82 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
   readonly readerId = 'qr-reader';
 
   async ngAfterViewInit(): Promise<void> {
-    await this.startScanner();
+    // Try auto-start (works on many desktops). Mobile often needs a tap — see needsTap.
+    await this.startScanner({ fromUserGesture: false });
   }
 
   async ngOnDestroy(): Promise<void> {
     await this.stopScanner();
   }
 
-  async startScanner(): Promise<void> {
+  /** Black-box / Retry — always a user gesture so getUserMedia is allowed. */
+  async onEnableCamera(): Promise<void> {
+    await this.startScanner({ fromUserGesture: true });
+  }
+
+  async startScanner(opts: { fromUserGesture: boolean } = { fromUserGesture: true }): Promise<void> {
     this.cameraError.set(null);
+    this.lastCameraError = '';
     this.starting.set(true);
+    this.needsTap.set(false);
     this.handling = false;
 
     try {
+      if (this.insecureContext()) {
+        this.cameraError.set(this.cameraUnavailableMessage());
+        this.scanning.set(false);
+        this.needsTap.set(false);
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        this.cameraError.set(
+          'This browser does not support camera access. Use photo upload or type the code.'
+        );
+        return;
+      }
+
       await this.stopScanner();
       this.ensureReaderElement();
-      this.scanner = new Html5Qrcode(this.readerId, FORMATS);
 
+      // Explicit permission first — more reliable than html5-qrcode alone on iOS/Chrome.
+      const permitted = await this.requestCameraPermission();
+      if (!permitted) {
+        if (!opts.fromUserGesture) {
+          // Auto-start blocked until user taps the preview.
+          this.needsTap.set(true);
+          this.scanning.set(false);
+          return;
+        }
+        this.cameraError.set(this.cameraUnavailableMessage());
+        this.needsTap.set(true);
+        this.scanning.set(false);
+        return;
+      }
+
+      this.scanner = new Html5Qrcode(this.readerId, FORMATS);
       const started = await this.tryStartCamera(this.scanner);
       if (!started) {
-        this.cameraError.set(this.cameraUnavailableMessage());
+        if (!opts.fromUserGesture) {
+          this.needsTap.set(true);
+        } else {
+          this.cameraError.set(this.cameraUnavailableMessage());
+          this.needsTap.set(true);
+        }
         this.scanning.set(false);
         return;
       }
       this.scanning.set(true);
+      this.needsTap.set(false);
     } catch (err) {
       console.error(err);
-      this.cameraError.set(this.cameraUnavailableMessage());
+      this.lastCameraError = err instanceof Error ? err.message : String(err);
+      if (!opts.fromUserGesture) {
+        this.needsTap.set(true);
+      } else {
+        this.cameraError.set(this.cameraUnavailableMessage());
+        this.needsTap.set(true);
+      }
       this.scanning.set(false);
     } finally {
       this.starting.set(false);
@@ -139,7 +195,6 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
     this.lookupError.set(null);
     this.fileScanning.set(true);
     try {
-      // scanFile cannot run while camera stream is active
       await this.stopScanner();
       this.ensureReaderElement();
       const fileScanner = new Html5Qrcode(this.readerId, FORMATS);
@@ -155,8 +210,7 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
       this.lookupError.set(
         'Could not read a barcode from that image. Try a clearer photo or enter the code manually.'
       );
-      // Try to restore live camera if possible
-      void this.startScanner();
+      void this.startScanner({ fromUserGesture: false });
     } finally {
       this.fileScanning.set(false);
     }
@@ -224,39 +278,74 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
 
   async scanAgain(): Promise<void> {
     this.clearProduct();
-    await this.startScanner();
+    await this.startScanner({ fromUserGesture: true });
+  }
+
+  /** Unlock permission with a real getUserMedia call, then release tracks. */
+  private async requestCameraPermission(): Promise<boolean> {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' } },
+      });
+      stream.getTracks().forEach((t) => t.stop());
+      return true;
+    } catch (err) {
+      console.warn('getUserMedia environment failed', err);
+      this.lastCameraError = err instanceof Error ? err.message : String(err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        });
+        stream.getTracks().forEach((t) => t.stop());
+        return true;
+      } catch (err2) {
+        console.warn('getUserMedia any video failed', err2);
+        this.lastCameraError = err2 instanceof Error ? err2.message : String(err2);
+        return false;
+      }
+    }
   }
 
   private async tryStartCamera(scanner: Html5Qrcode): Promise<boolean> {
     const onSuccess = (decoded: string) => void this.onDetected(decoded);
     const onError = () => undefined;
 
-    // 1) Rear camera (phones)
-    if (await this.tryStart(scanner, { facingMode: 'environment' }, onSuccess, onError)) {
-      return true;
-    }
-
-    // 2) Front camera (laptops)
-    if (await this.tryStart(scanner, { facingMode: 'user' }, onSuccess, onError)) {
-      return true;
-    }
-
-    // 3) Any enumerated device
     let cameras: CameraDevice[] = [];
     try {
       cameras = await Html5Qrcode.getCameras();
     } catch (err) {
       console.error('getCameras failed', err);
-      return false;
+      this.lastCameraError = err instanceof Error ? err.message : String(err);
     }
 
-    for (const cam of cameras) {
+    const ordered = this.preferRearCameras(cameras);
+    for (const cam of ordered) {
       if (await this.tryStart(scanner, cam.id, onSuccess, onError)) {
         return true;
       }
     }
 
+    if (await this.tryStart(scanner, { facingMode: 'environment' }, onSuccess, onError)) {
+      return true;
+    }
+    if (await this.tryStart(scanner, { facingMode: 'user' }, onSuccess, onError)) {
+      return true;
+    }
+
     return false;
+  }
+
+  private preferRearCameras(cameras: CameraDevice[]): CameraDevice[] {
+    if (!cameras.length) return [];
+    const rear = cameras.filter((c) =>
+      /back|rear|environment|world/i.test(c.label)
+    );
+    const front = cameras.filter((c) => /front|user|face/i.test(c.label));
+    const rest = cameras.filter((c) => !rear.includes(c) && !front.includes(c));
+    // Phones: rear first. Laptops often only have "front"/ unlabeled — use all.
+    return [...rear, ...rest, ...front];
   }
 
   private async tryStart(
@@ -278,6 +367,7 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
       return true;
     } catch (err) {
       console.warn('Camera start failed for config', cameraIdOrConfig, err);
+      this.lastCameraError = err instanceof Error ? err.message : String(err);
       return false;
     }
   }
@@ -291,14 +381,13 @@ export class ScanComponent implements AfterViewInit, OnDestroy {
   private cameraUnavailableMessage(): string {
     if (this.insecureContext()) {
       return (
-        'Live camera needs HTTPS or localhost. On a phone over Wi‑Fi HTTP, ' +
-        'use “Upload barcode photo” or type the code below. ' +
-        'On a laptop, allow camera permission and retry.'
+        'Live camera needs HTTPS or localhost. Use “Upload barcode photo” or type the code.'
       );
     }
+    const detail = this.lastCameraError ? ` (${this.lastCameraError})` : '';
     return (
-      'Camera unavailable. Allow camera access in the browser / system settings, ' +
-      'close other apps using the camera, then tap Retry — or upload a photo / type the code.'
+      `Camera unavailable${detail}. Allow camera for this site in browser/system settings, ` +
+      'close other apps using the camera, then tap the preview — or upload a photo / type the code.'
     );
   }
 

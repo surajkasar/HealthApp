@@ -10,25 +10,41 @@
     @if (insecureContext()) {
       <p class="rounded-2xl bg-coral-500/10 px-3 py-2 text-xs text-ink-800">
         You’re not on HTTPS/localhost, so the live camera may be blocked. Use
-        <strong>Upload barcode photo</strong> or type the code — that works in demo mode on phone Wi‑Fi.
+        <strong>Upload barcode photo</strong> or type the code.
       </p>
     }
 
-    <div class="overflow-hidden rounded-2xl border border-ink-200 bg-black relative">
-      <div [id]="readerId" #reader class="min-h-[240px] w-full"></div>
+    <div class="overflow-hidden rounded-2xl border border-ink-200 bg-black relative min-h-[280px]">
+      <div [id]="readerId" #reader class="min-h-[280px] w-full"></div>
+
       @if (starting()) {
-        <p class="absolute inset-0 grid place-items-center bg-black/60 text-sm text-white">
+        <p class="absolute inset-0 z-10 grid place-items-center bg-black/70 text-sm text-white">
           Starting camera…
         </p>
+      } @else if (needsTap() && !scanning()) {
+        <button
+          type="button"
+          class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/80 px-4 text-center text-white"
+          (click)="onEnableCamera()"
+        >
+          <span class="text-base font-semibold">Tap to start camera</span>
+          <span class="text-xs text-white/70">
+            Allow camera access when the browser asks
+          </span>
+        </button>
       }
     </div>
 
     @if (cameraError()) {
       <p class="text-sm text-coral-600">{{ cameraError() }}</p>
-      <button type="button" class="btn-secondary w-full" (click)="startScanner()">
-        Retry camera
+    }
+
+    @if (!scanning() && !starting()) {
+      <button type="button" class="btn-secondary w-full" (click)="onEnableCamera()">
+        {{ cameraError() || needsTap() ? 'Retry camera' : 'Start camera' }}
       </button>
     }
+
     @if (scanning()) {
       <p class="text-center text-xs text-ink-500">Scanning… hold steady over the code</p>
     }
